@@ -1,0 +1,20 @@
+{
+  "name": "taskqueue",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc && node dist/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "type": "module",
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@types/node": "^22.10.5",
+    "@valkey/valkey-glide": "^1.2.1",
+    "typescript": "^5.7.2"
+  }
+}
