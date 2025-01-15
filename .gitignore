@@ -4,4 +4,4 @@ data
 python/venv/
 node/dist/
 node/index.js
-
+dump.rdb
