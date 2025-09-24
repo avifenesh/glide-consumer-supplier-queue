@@ -1,17 +1,21 @@
 import asyncio
+from typing import List
+
 from glide import (
     GlideClusterClient,
-    NodeAddress,
     GlideClusterClientConfiguration,
-    StreamReadGroupOptions,
+    NodeAddress,
     StreamGroupOptions,
+    StreamReadGroupOptions,
 )
-from typing import List, Mapping, Optional, Sequence, Union
+
+from queue_logic import summarize_stream_entries, should_process_batch
 
 THRESHOLD = 5
 STREAM_KEY = b"tasks"
 CONSUMER_GROUP = b"workers"
 CONSUMER_NAME = b"worker-1"
+BATCH_BLOCK_MS = 5000
 
 producer_finished = False
 
@@ -25,6 +29,20 @@ def generate_tasks(count: int) -> List[bytes]:
 async def create_client() -> GlideClusterClient:
     config = GlideClusterClientConfiguration([NodeAddress(host="127.0.0.1", port=6379)])
     return await GlideClusterClient.create(config)
+
+
+async def ensure_consumer_group(client: GlideClusterClient) -> None:
+    try:
+        await client.xgroup_create(
+            key=STREAM_KEY,
+            group_name=CONSUMER_GROUP,
+            group_id=b"$",
+            options=StreamGroupOptions(make_stream=True),
+        )
+    except Exception as error:  # noqa: BLE001 - GLIDE raises generic exceptions
+        message = str(error)
+        if "BUSYGROUP" not in message:
+            raise
 
 
 # Producer using xadd to add tasks to the stream
@@ -42,42 +60,43 @@ async def producer(glide_producer: GlideClusterClient):
 # Consumer using xreadgroup to read tasks from the stream
 async def consumer(glide_consumer: GlideClusterClient):
     while True:
-        # Get stream length
         stream_length = await glide_consumer.xlen(STREAM_KEY)
 
-        if stream_length >= THRESHOLD or producer_finished:
-            # Get tasks from the stream
-            tasks_result = await glide_consumer.xreadgroup(
-                {STREAM_KEY: b">"},
-                CONSUMER_GROUP,
-                CONSUMER_NAME,
-                StreamReadGroupOptions(count=THRESHOLD, block_ms=5000),
-            )
+        if not should_process_batch(
+            stream_length=stream_length,
+            threshold=THRESHOLD,
+            producer_finished=producer_finished,
+        ):
+            if producer_finished and stream_length == 0:
+                break
 
-            if not tasks_result:
-                if producer_finished:
+            await asyncio.sleep(0.01)
+            continue
+
+        desired_count = max(1, min(stream_length, THRESHOLD))
+
+        tasks_result = await glide_consumer.xreadgroup(
+            {STREAM_KEY: b">"},
+            CONSUMER_GROUP,
+            CONSUMER_NAME,
+            StreamReadGroupOptions(count=desired_count, block_ms=BATCH_BLOCK_MS),
+        )
+
+        if not tasks_result:
+            if producer_finished:
+                remaining = await glide_consumer.xlen(STREAM_KEY)
+                if remaining == 0:
                     break
-                continue
+            continue
 
-            stream_entries = tasks_result.get(STREAM_KEY, {})
-            if not stream_entries:
-                continue
+        stream_entries = tasks_result.get(STREAM_KEY, {})
+        summary = summarize_stream_entries(stream_entries, task_field=b"task")
 
-            # Acknowledge tasks once pulled and remove them from the stream
-            message_ids: List[Union[str, bytes]] = []
-            batch_data = []
-            for msg_id, entries in stream_entries.items():
-                message_ids.append(msg_id)
-                if entries:
-                    batch_data.extend(entries)
+        if summary["ack_ids"]:
+            await glide_consumer.xack(STREAM_KEY, CONSUMER_GROUP, summary["ack_ids"])
 
-            # Acknowledge messages
-            if message_ids:
-                await glide_consumer.xack(STREAM_KEY, CONSUMER_GROUP, message_ids)
-                print("Processing batch:", batch_data)
-
-        # Wait before checking again if threshold not met
-        await asyncio.sleep(0.01)
+        if summary["tasks"]:
+            print(f"Processing batch of {len(summary['tasks'])} tasks", summary["tasks"])
 
     await glide_consumer.flushall()
     await glide_consumer.close()
@@ -87,15 +106,8 @@ async def main():
     glide_producer = await create_client()
     glide_consumer = await create_client()
 
-    # Create the stream and consumer group
-    await glide_producer.xgroup_create(
-        key=STREAM_KEY,
-        group_name=CONSUMER_GROUP,
-        group_id="$",
-        options=StreamGroupOptions(make_stream=True),
-    )
+    await ensure_consumer_group(glide_producer)
 
-    # Start producer and consumer
     await asyncio.gather(producer(glide_producer), consumer(glide_consumer))
 
 
