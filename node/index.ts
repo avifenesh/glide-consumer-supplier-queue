@@ -24,6 +24,10 @@ function wait(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+async function processTask(task: string): Promise<void> {
+  console.log(`Processed task: ${task}`);
+}
+
 // ** Helpers **
 
 // Helpers - Generate tasks
@@ -110,12 +114,28 @@ async function consumer(glideConsumer: GlideClusterClient) {
 
     const summary = summarizeStreamEntries(streamData.value, { taskField: "task" });
 
-    if (summary.ackIds.length > 0) {
-      await glideConsumer.xack(STREAM_KEY, CONSUMER_GROUP, summary.ackIds);
-    }
-
     if (summary.tasks.length > 0) {
       console.log(`Processing batch of ${summary.tasks.length} tasks`, summary.tasks);
+    }
+
+    const ackIdsToAcknowledge: string[] = [];
+
+    for (const [index, task] of summary.tasks.entries()) {
+      const ackId = summary.ackIds[index];
+      if (typeof ackId === "undefined") {
+        continue;
+      }
+
+      try {
+        await processTask(task);
+        ackIdsToAcknowledge.push(ackId);
+      } catch (error) {
+        console.error(`Failed to process task ${task}`, error);
+      }
+    }
+
+    if (ackIdsToAcknowledge.length > 0) {
+      await glideConsumer.xack(STREAM_KEY, CONSUMER_GROUP, ackIdsToAcknowledge);
     }
   }
 
