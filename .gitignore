@@ -1,5 +1,4 @@
 node/node_modules/
-node/package-lock.json
 data
 python/venv/
 node/dist/
