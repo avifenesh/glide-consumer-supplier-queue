@@ -29,13 +29,7 @@ jobs:
       - name: Wait for Valkey
         run: |
           for i in {1..30}; do
-            if python3 - <<'PY'
-import socket
-with socket.socket() as sock:
-    sock.settimeout(1)
-    sock.connect(("127.0.0.1", 6379))
-PY
-            then
+            if python3 -c "import socket; socket.create_connection(('127.0.0.1', 6379), timeout=1).close()"; then
               echo "Valkey is ready"
               exit 0
             fi
