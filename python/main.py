@@ -94,6 +94,7 @@ async def consumer(glide_consumer: GlideClusterClient):
 
         if summary["ack_ids"]:
             await glide_consumer.xack(STREAM_KEY, CONSUMER_GROUP, summary["ack_ids"])
+            await glide_consumer.xdel(STREAM_KEY, summary["ack_ids"])
 
         if summary["tasks"]:
             print(f"Processing batch of {len(summary['tasks'])} tasks", summary["tasks"])
