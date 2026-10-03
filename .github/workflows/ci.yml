@@ -11,32 +11,16 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    services:
-      valkey:
-        image: valkey/valkey:8.0
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "valkey-cli ping"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 10
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Wait for Valkey
+      - name: Start a Valkey cluster
         run: |
-          for i in {1..30}; do
-            if python3 -c "import socket; socket.create_connection(('127.0.0.1', 6379), timeout=1).close()"; then
-              echo "Valkey is ready"
-              exit 0
-            fi
-            sleep 1
-          done
-          echo "Valkey did not become ready in time" >&2
-          exit 1
+          docker compose up -d --wait --wait-timeout 60 valkey-ci
+          docker compose exec -T valkey-ci valkey-cli CLUSTER ADDSLOTSRANGE 0 16383
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -54,7 +38,7 @@ jobs:
         working-directory: node
 
       - name: Run Node example
-        run: npm run example
+        run: timeout 120 npm run example
         working-directory: node
 
       - name: Setup Python
@@ -73,5 +57,9 @@ jobs:
         working-directory: python
 
       - name: Run Python example
-        run: python main.py
+        run: timeout 120 python main.py
         working-directory: python
+
+      - name: Stop the test cluster
+        if: always()
+        run: docker compose down --volumes

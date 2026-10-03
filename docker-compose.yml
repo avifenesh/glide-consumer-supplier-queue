@@ -1,4 +1,26 @@
 services:
+  valkey-ci:
+    image: valkey/valkey:8.0.1
+    ports:
+      - "6379:6379"
+      - "16379:16379"
+    command:
+      - valkey-server
+      - --cluster-enabled
+      - "yes"
+      - --cluster-config-file
+      - nodes.conf
+      - --cluster-announce-ip
+      - 127.0.0.1
+      - --cluster-announce-port
+      - "6379"
+      - --cluster-announce-bus-port
+      - "16379"
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 1s
+      timeout: 1s
+      retries: 30
   valkey-cluster:
     image: valkey/valkey:8.0.1
     ports:

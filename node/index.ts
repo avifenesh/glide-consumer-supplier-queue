@@ -136,6 +136,7 @@ async function consumer(glideConsumer: GlideClusterClient) {
 
     if (ackIdsToAcknowledge.length > 0) {
       await glideConsumer.xack(STREAM_KEY, CONSUMER_GROUP, ackIdsToAcknowledge);
+      await glideConsumer.xdel(STREAM_KEY, ackIdsToAcknowledge);
     }
   }
 
