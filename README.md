@@ -12,9 +12,9 @@ A simple yet powerful task queue implementation using Valkey streams and the GLI
 
 ## Quick Start
 
-1. Start the Valkey cluster:
+1. Start the Valkey cluster (three nodes on ports 6379-6381):
 ```bash
-docker-compose up -d
+docker compose up -d valkey-cluster
 ```
 
 2. Choose your implementation:
@@ -44,7 +44,7 @@ npm run dev
 
 ## About Valkey GLIDE
 
-[Valkey GLIDE](https://github.com/valkey-io/valkey-glide) is a multi-language client library supporting Python, Node.js, Java, and Go (with Ruby and C++ under development). It's designed for:
+[Valkey GLIDE](https://github.com/valkey-io/valkey-glide) is a multi-language client library supporting Python, Java, Node.js, Go, C# and PHP (C# and PHP in preview, with C++ and Ruby under development). It's designed for:
 
 - High reliability and performance
 - Consistent features across languages
